@@ -86,11 +86,13 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
              r.ingredients AS ingredients,
              r.instructions AS instructions,
              r.time AS time,
-             ROUND(IFNULL(AVG(cr.rating), 0), 1) AS averageRating
-      FROM Recipes r
-      LEFT JOIN CommentAndRating cr ON r.id = cr.recipeId
-      GROUP BY r.id
-    ''');
+             ROUND(IFNULL(AVG(cr.rating), 0), 1) AS averageRating,
+           (SELECT COUNT(*) FROM favorites f WHERE f.recipeId = r.id AND f.userId = ?) AS isFavorite
+    FROM Recipes r
+    LEFT JOIN CommentAndRating cr ON r.id = cr.recipeId
+    GROUP BY r.id
+  ''', [userId]);
+
     setState(() {
       _recipes = recipes;
     });
@@ -314,33 +316,48 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
                         final recipe = _recipes[index];
                         // Fetching the image as Uint8List
                         final imageBytes = recipe['recipeImage'] as Uint8List?;
-                        final double rating =
-                            (recipe['averageRating'] as num?)?.toDouble() ??
-                                0.0;
+                        final double rating = (recipe['averageRating'] as num?)?.toDouble() ?? 0.0; // Ensure it is a double
                         return RecipeCard(
                           title: recipe['recipeName'] ?? "Unknown",
                           imageBytes: imageBytes,
                           time: recipe['time'] ?? "N/A",
                           authorOrCategory: recipe['insertedBy'] ?? "Unknown",
-                          rating:
-                              rating, // Static for now, replace with DB value if available
-                          isFavorite: false, // Implement favorite logic
-                          showFavorite: false,
-                          showMenu: false,
+                          rating:  rating, // Use actual rating , // Static for now, replace with DB value if available
+                          isFavorite: recipe['isFavorite'] == 1, // Use database value
+                          onFavoritePressed: () async {
+                            final user = await _databaseHelper.getUserByEmail(widget.userEmail);
+                            if (user == null) return;
+
+                            int userId = user['id'];
+                            bool newFavStatus = !(recipe['isFavorite'] == 1);
+
+                            await _databaseHelper.toggleFavorite(userId, recipe['recipeId'], newFavStatus);
+
+                            setState(() {
+                              _recipes[index]['isFavorite'] = newFavStatus ? 1 : 0;
+                            });
+                          },
                           isCategory: false,
-                          onFavoritePressed: () {},
                           onEditPressed: () {},
                           onDeletePressed: () {},
-                          onTap: () {
-                            Navigator.push(
+                          onTap: () async {
+                            final isFavorite = await Navigator.push(
                               context,
                               MaterialPageRoute(
                                 builder: (context) => RecipeDetailScreen(
-                                  recipeId: recipe['recipeId'] as int,
+                                  recipeId: recipe['recipeId'],
+                                  userEmail: widget.userEmail, // Pass userEmail here
                                 ),
                               ),
                             );
+
+                            if (isFavorite != null) {
+                              setState(() {
+                                _recipes[index]['isFavorite'] = isFavorite ? 1 : 0;
+                              });
+                            }
                           },
+                          showFavorite: true, showMenu: false,
                         );
                       },
                     ),

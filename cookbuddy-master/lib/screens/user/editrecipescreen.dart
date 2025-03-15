@@ -1,15 +1,18 @@
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
+import '../../utils/colors.dart';
 
 class EditRecipeScreen extends StatefulWidget {
   final int recipeId;
   final String initialName;
   final String initialIngredients;
   final String initialInstructions;
+  final String initialyoutubeLink;
   final String? initialTime;
   final Uint8List? initialImage;
 
-  final Function(int, String, String, String, String?) onUpdateRecipe;
+  final Function(int, String, String, String, String, String?) onUpdateRecipe;
 
   const EditRecipeScreen({
     super.key,
@@ -17,6 +20,7 @@ class EditRecipeScreen extends StatefulWidget {
     required this.initialName,
     required this.initialIngredients,
     required this.initialInstructions,
+    required this.initialyoutubeLink,
     required this.initialTime,
     required this.initialImage,
     required this.onUpdateRecipe,
@@ -30,16 +34,16 @@ class _EditRecipeScreenState extends State<EditRecipeScreen> {
   late TextEditingController nameController;
   late TextEditingController ingredientsController;
   late TextEditingController instructionsController;
+  late TextEditingController youtubeLinkController;
   late TextEditingController timeController;
 
   @override
   void initState() {
     super.initState();
     nameController = TextEditingController(text: widget.initialName);
-    ingredientsController =
-        TextEditingController(text: widget.initialIngredients);
-    instructionsController =
-        TextEditingController(text: widget.initialInstructions);
+    ingredientsController = TextEditingController(text: widget.initialIngredients);
+    instructionsController = TextEditingController(text: widget.initialInstructions);
+    youtubeLinkController = TextEditingController(text: widget.initialyoutubeLink);
     timeController = TextEditingController(text: widget.initialTime ?? '');
   }
 
@@ -48,6 +52,7 @@ class _EditRecipeScreenState extends State<EditRecipeScreen> {
     nameController.dispose();
     ingredientsController.dispose();
     instructionsController.dispose();
+    youtubeLinkController.dispose();
     timeController.dispose();
     super.dispose();
   }
@@ -58,6 +63,7 @@ class _EditRecipeScreenState extends State<EditRecipeScreen> {
       nameController.text,
       ingredientsController.text,
       instructionsController.text,
+      youtubeLinkController.text,
       timeController.text.isEmpty ? null : timeController.text,
     );
     Navigator.pop(context);
@@ -66,7 +72,19 @@ class _EditRecipeScreenState extends State<EditRecipeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Edit Recipe')),
+      appBar: AppBar(
+        title: Text(
+          "Edit Recipe",
+          style: GoogleFonts.lora(
+              fontWeight: FontWeight.bold,
+              color: AppColors.headingText,
+              fontSize: 22),
+        ),
+        backgroundColor: AppColors.appBar,
+        centerTitle: true,
+        automaticallyImplyLeading: true,
+      ),
+      backgroundColor: AppColors.background,
       body: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(

@@ -10,7 +10,6 @@ import 'package:image_picker/image_picker.dart';
 import 'package:cookbuddy/database/database_helper.dart';
 import 'package:cookbuddy/utils/colors.dart';
 import 'package:google_fonts/google_fonts.dart';
-
 import '../../widgets/recipe_card.dart';
 
 class MyRecipesScreen extends StatefulWidget {
@@ -27,7 +26,6 @@ class _MyRecipesScreenState extends State<MyRecipesScreen> {
   List<Map<String, dynamic>> myRecipes = [];
   List<Map<String, dynamic>> categories = [];
   bool isLoading = false;
-
   int _currentIndex = 1;
 
   @override
@@ -42,9 +40,8 @@ class _MyRecipesScreenState extends State<MyRecipesScreen> {
       isLoading = true;
     });
 
-// Fetch recipes uploaded by the user
-    List<Map<String, dynamic>> fetchedRecipes =
-        await _databaseHelper.getRecipesByEmail(widget.userEmail);
+    // Fetch recipes uploaded by the user
+    List<Map<String, dynamic>> fetchedRecipes = await _databaseHelper.getRecipesByEmail(widget.userEmail);
 
     List<Map<String, dynamic>> updatedRecipes = [];
 
@@ -55,11 +52,9 @@ class _MyRecipesScreenState extends State<MyRecipesScreen> {
       SELECT AVG(rating) AS avgRating FROM CommentAndRating WHERE recipeId = ?
     ''', [recipe['id']]);
 
-      double avgRating =
-          (result.isNotEmpty && result.first['avgRating'] != null)
-              ? double.parse(
-                  (result.first['avgRating'] as double).toStringAsFixed(1))
-              : 0.0;
+      double avgRating = (result.isNotEmpty && result.first['avgRating'] != null)
+          ? double.parse((result.first['avgRating'] as double).toStringAsFixed(1))
+          : 0.0;
 
       // Create a new mutable map instead of modifying the original read-only map
       updatedRecipes.add({
@@ -80,7 +75,7 @@ class _MyRecipesScreenState extends State<MyRecipesScreen> {
   }
 
   Future<void> _updateRecipe(int id, String name, String ingredients,
-      String instructions, String? time) async {
+      String instructions, String youtubeLink, String? time) async {
     final db = await _databaseHelper.database;
     await db.update(
       'Recipes',
@@ -88,6 +83,7 @@ class _MyRecipesScreenState extends State<MyRecipesScreen> {
         'name': name,
         'ingredients': ingredients,
         'instructions': instructions,
+        'youtubeLink' : youtubeLink,
         'time': time,
       },
       where: 'id = ?',
@@ -168,8 +164,7 @@ class _MyRecipesScreenState extends State<MyRecipesScreen> {
   void _showAddRecipeModal(BuildContext context) {
     final TextEditingController nameController = TextEditingController();
     final TextEditingController ingredientsController = TextEditingController();
-    final TextEditingController instructionsController =
-        TextEditingController();
+    final TextEditingController instructionsController = TextEditingController();
     final TextEditingController youtubeController = TextEditingController();
     Uint8List? selectedImage;
     int? selectedCategoryId;
@@ -705,8 +700,7 @@ class _MyRecipesScreenState extends State<MyRecipesScreen> {
                     imageBytes: imageBytes,
                     time: recipe['time'] ?? "N/A",
                     authorOrCategory: recipe['uploaderName'] ?? "Unknown",
-                    rating: recipe['avgRating'] ??
-                        0.0, // Static for now, replace with DB value if available
+                    rating: recipe['avgRating'] ?? 0.0, // Static for now, replace with DB value if available
                     isFavorite: false, // Implement favorite logic
                     showFavorite: false, showMenu: true, isCategory: false,
                     onFavoritePressed: () {
@@ -721,6 +715,7 @@ class _MyRecipesScreenState extends State<MyRecipesScreen> {
                             initialName: recipe['name'],
                             initialIngredients: recipe['ingredients'],
                             initialInstructions: recipe['instructions'],
+                            initialyoutubeLink: recipe['youtubeLink'],
                             initialTime: recipe['time'],
                             initialImage: recipe['image'],
                             onUpdateRecipe: _updateRecipe,

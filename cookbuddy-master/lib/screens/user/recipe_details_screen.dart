@@ -5,11 +5,12 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:cookbuddy/database/database_helper.dart';
+import 'package:url_launcher/url_launcher_string.dart';
 
 class RecipeDetailScreen extends StatefulWidget {
   final int recipeId;
-  const RecipeDetailScreen({Key? key, required this.recipeId})
-      : super(key: key);
+  final String userEmail;
+  const RecipeDetailScreen({super.key, required this.recipeId, required this.userEmail});
 
   @override
   _RecipeDetailScreenState createState() => _RecipeDetailScreenState();
@@ -50,7 +51,7 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> {
 
   Future<void> _loadCommentsAndRatings() async {
     final comments =
-        await _databaseHelper.getCommentsAndRatings(widget.recipeId);
+    await _databaseHelper.getCommentsAndRatings(widget.recipeId);
     double avgRating = 0.0;
 
     if (comments.isNotEmpty) {
@@ -65,14 +66,26 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> {
     });
   }
 
-  Future<void> _checkFavoriteStatus() async {
+  /*Future<void> _checkFavoriteStatus() async {
     bool isFavorite = await _databaseHelper.isRecipeFavorite(widget.recipeId);
+    setState(() {
+      _isFavorite = isFavorite;
+    });
+  }*/
+
+  Future<void> _checkFavoriteStatus() async {
+    final user = await _databaseHelper.getUserByEmail(widget.userEmail); // Use actual user email
+    if (user == null) return;
+
+    int userId = user['id'];
+    bool isFavorite = await _databaseHelper.isRecipeFavorite(userId, widget.recipeId);
+
     setState(() {
       _isFavorite = isFavorite;
     });
   }
 
-  Future<void> _toggleFavorite() async {
+  /*Future<void> _toggleFavorite() async {
     await _databaseHelper.toggleFavorite(widget.recipeId, !_isFavorite);
     setState(() {
       _isFavorite = !_isFavorite;
@@ -86,6 +99,62 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> {
         backgroundColor: AppColors.primary,
       ),
     );
+  }*/
+
+  Future<void> _toggleFavorite() async {
+    final user = await _databaseHelper.getUserByEmail(
+        widget.userEmail); // Use correct userEmail
+    if (user == null) return;
+
+    int userId = user['id'];
+
+    await _databaseHelper.toggleFavorite(userId, widget.recipeId, !_isFavorite);
+
+    setState(() {
+      _isFavorite = !_isFavorite;
+    });
+
+    // Notify Home Screen to update
+    Navigator.pop(context, _isFavorite);
+  }
+
+  Future<void> _launchYoutubeLink(String? url) async {
+    if (url == null || url.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("No video link available")),
+      );
+      return;
+    }
+
+    Uri? uri = Uri.tryParse(url);
+    String? videoId;
+
+    if (uri != null) {
+      if (uri.host.contains("youtube.com") && uri.queryParameters.containsKey("v")) {
+        videoId = uri.queryParameters["v"];
+      } else if (uri.host.contains("youtu.be")) {
+        videoId = uri.pathSegments.isNotEmpty ? uri.pathSegments.first : null;
+      }
+    }
+
+    if (videoId != null) {
+      String youtubeAppUrl = "youtube://$videoId";
+      String youtubeWebUrl = "https://www.youtube.com/watch?v=$videoId";
+
+      if (await canLaunchUrlString(youtubeAppUrl)) {
+        await launchUrlString(youtubeAppUrl, mode: LaunchMode.externalApplication);
+      } else {
+        await launchUrlString(youtubeWebUrl, mode: LaunchMode.externalApplication);
+      }
+    } else {
+      if (await canLaunchUrlString(url)) {
+        await launchUrlString(url, mode: LaunchMode.externalApplication);
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Could not open video link")),
+        );
+      }
+    }
   }
 
   Future<void> _submitCommentAndRating() async {
@@ -128,30 +197,26 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: AppColors.appBar,
         toolbarHeight: 60,
-        title: Center(
-          child: Text(
-            _recipeDetails['name'] ?? "Recipe Details",
-            style: GoogleFonts.lora(
+        backgroundColor: AppColors.appBar,
+        title: Text(
+          _recipeDetails['name'] ?? "Recipe Details",
+          style: GoogleFonts.lora(
               fontWeight: FontWeight.bold,
               fontSize: 22,
-              color: AppColors.headingText,
-            ),
-          ),
+              color: AppColors.headingText),
         ),
+        centerTitle: true,
         actions: [
           IconButton(
-            icon: const Icon(
-              Icons.share,
-              color: AppColors.headingText,
-            ),
+            icon: const Icon(Icons.share),
             onPressed: () {
               Share.share('Check out this recipe: ${_recipeDetails['name']}');
             },
           ),
         ],
       ),
+      backgroundColor: AppColors.background,
       body: SingleChildScrollView(
         child: Padding(
           padding: const EdgeInsets.all(16.0),
@@ -185,28 +250,15 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> {
                   ),
                   Row(
                     children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: AppColors.primary.withOpacity(0.2),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Text(
-                          "${_averageRating.toStringAsFixed(1)} ⭐",
-                          style: GoogleFonts.lora(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: AppColors.headingText,
-                          ),
-                        ),
+                      Text(
+                        "${_averageRating.toStringAsFixed(1)} ⭐",
+                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                       ),
                       const SizedBox(width: 8),
                       IconButton(
                         icon: Icon(
                           _isFavorite ? Icons.favorite : Icons.favorite_border,
                           color: Colors.red,
-                          size: 30,
                         ),
                         onPressed: _toggleFavorite,
                       ),
@@ -246,6 +298,20 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> {
                     fontSize: 18,
                     color: AppColors.headingText,
                   ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              // YouTube Link
+              _buildSectionTitle("Video Tutorial"),
+              Card(
+                margin: const EdgeInsets.symmetric(vertical: 8),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                elevation: 3,
+                child: ListTile(
+                  leading: Icon(Icons.play_circle_filled, color: Colors.red),
+
+                  subtitle: Text(_recipeDetails['youtubeLink'] ?? "No video available"),
+                  onTap: () => _launchYoutubeLink(_recipeDetails['youtubeLink']),
                 ),
               ),
               const SizedBox(height: 20),
@@ -367,18 +433,61 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> {
           ),
         ),
       ),
-      backgroundColor: AppColors.background,
     );
   }
 
   Widget _buildSectionTitle(String title) {
     return Text(
       title,
-      style: GoogleFonts.lora(
-        fontSize: 20,
-        fontWeight: FontWeight.bold,
-        color: AppColors.headingText,
+      style: GoogleFonts.lora(fontSize: 20, fontWeight: FontWeight.bold),
+    );
+  }
+
+  Widget _buildCommentInput() {
+    return TextField(
+      controller: _commentController,
+      maxLines: 3,
+      decoration: InputDecoration(
+        hintText: "Write your comment...",
+        labelText: "Ingredients",
+        labelStyle: GoogleFonts.lora(color: AppColors.hintText),
+        floatingLabelStyle: GoogleFonts.lora(color: Colors.orangeAccent),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: BorderSide(color: AppColors.hintText, width: 1),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderSide: BorderSide(color: Colors.orangeAccent),
+        ),
       ),
+    );
+  }
+
+  Widget _buildSubmitButton() {
+    return SizedBox(
+      width: double.infinity,
+      child: ElevatedButton(
+        onPressed: _submitCommentAndRating,
+        child: Text("Submit"),
+      ),
+    );
+  }
+
+  Widget _ratingStarButton() {
+    return Row(
+      children: List.generate(5, (index) {
+        return IconButton(
+          icon: Icon(
+            Icons.star,
+            color: _selectedRating > index ? Colors.amber : Colors.grey,
+          ),
+          onPressed: () {
+            setState(() {
+              _selectedRating = index + 1;
+            });
+          },
+        );
+      }),
     );
   }
 }

@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:cookbuddy/database/database_helper.dart';
-
 import '../../utils/colors.dart';
 import '../user/editrecipescreen.dart';
 
@@ -21,7 +20,6 @@ class _RecipeManagementScreenState extends State<RecipeManagementScreen> {
   List<Map<String, dynamic>> recipes = [];
   List<Map<String, dynamic>> categories = [];
   bool isLoading = false;
-
   int _selectedIndex = 1;
 
   void _onNavItemTapped(int index) {
@@ -50,13 +48,23 @@ class _RecipeManagementScreenState extends State<RecipeManagementScreen> {
   Future<void> _fetchRecipes() async {
     final db = await _databaseHelper.database;
     final result = await db.rawQuery('''
-      SELECT Recipes.*,
-             Users.username AS userName
-      FROM Recipes
-      LEFT JOIN Users ON Recipes.uploaderId = Users.id
-      WHERE Recipes.insertedBy = 'admin' -- Filter recipes by admin
-    ''');
-    recipes = result;
+    SELECT Recipes.*, 
+           Users.username AS userName,
+           (SELECT AVG(rating) FROM CommentAndRating WHERE CommentAndRating.recipeId = Recipes.id) AS avgRating
+    FROM Recipes
+    LEFT JOIN Users ON Recipes.uploaderId = Users.id
+    WHERE Recipes.insertedBy = 'admin'
+  ''');
+
+    setState(() {
+      recipes = result.map((recipe) {
+        double avgRating = (recipe['avgRating'] as double?) ?? 0.0;
+        return {
+          ...recipe, // Copy all existing key-value pairs
+          'avgRating': double.parse(avgRating.toStringAsFixed(1)), // Round to 1 decimal
+        };
+      }).toList();
+    });
   }
 
   Future<void> _fetchCategories() async {
@@ -76,7 +84,7 @@ class _RecipeManagementScreenState extends State<RecipeManagementScreen> {
   }
 
   Future<void> _updateRecipe(int id, String name, String ingredients,
-      String instructions, String? time) async {
+      String instructions, String youtubeLink , String? time) async {
     final db = await _databaseHelper.database;
     await db.update(
       'Recipes',
@@ -84,6 +92,7 @@ class _RecipeManagementScreenState extends State<RecipeManagementScreen> {
         'name': name,
         'ingredients': ingredients,
         'instructions': instructions,
+        'youtubeLink' : youtubeLink,
         'time': time,
       },
       where: 'id = ?',
@@ -94,8 +103,7 @@ class _RecipeManagementScreenState extends State<RecipeManagementScreen> {
   void _showAddRecipeModal(BuildContext context) {
     final TextEditingController nameController = TextEditingController();
     final TextEditingController ingredientsController = TextEditingController();
-    final TextEditingController instructionsController =
-        TextEditingController();
+    final TextEditingController instructionsController = TextEditingController();
     final TextEditingController youtubeController = TextEditingController();
     Uint8List? selectedImage;
     int? selectedCategoryId;
@@ -298,9 +306,9 @@ class _RecipeManagementScreenState extends State<RecipeManagementScreen> {
                   labelText: "YouTube Link",
                   labelStyle: GoogleFonts.lora(
                       color: AppColors.hintText // Label text color
-                      ),
+                  ),
                   floatingLabelStyle:
-                      GoogleFonts.lora(color: Colors.orangeAccent),
+                  GoogleFonts.lora(color: Colors.orangeAccent),
                   focusedBorder: OutlineInputBorder(
                     borderSide: BorderSide(color: Colors.orangeAccent),
                   ),
@@ -430,80 +438,84 @@ class _RecipeManagementScreenState extends State<RecipeManagementScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        toolbarHeight: 60,
-        automaticallyImplyLeading: false,
-        title: Text(
-          "Recipe Management",
-          style: GoogleFonts.lora(
-              fontWeight: FontWeight.bold,
-              fontSize: 22,
-              color: AppColors.headingText),
+    return WillPopScope(
+      onWillPop: () async => false,
+      child: Scaffold(
+        appBar: AppBar(
+          toolbarHeight: 60,
+          automaticallyImplyLeading: false,
+          title: Text(
+            "Recipe Management",
+            style: GoogleFonts.lora(
+                fontWeight: FontWeight.bold,
+                fontSize: 22,
+                color: AppColors.headingText),
+          ),
+          centerTitle: true,
+          backgroundColor: AppColors.appBar,
         ),
-        centerTitle: true,
-        backgroundColor: AppColors.appBar,
-      ),
-      backgroundColor: AppColors.background,
-      body: Padding(
-        padding: const EdgeInsets.all(8.0),
-        child: isLoading
-            ? const Center(child: CircularProgressIndicator())
-            : ListView.builder(
-                itemCount: recipes.length,
-                itemBuilder: (context, index) {
-                  final recipe = recipes[index];
-                  final imageBytes = recipe['image'] as Uint8List?;
-                  return RecipeCard(
-                    title: recipe['name'] ?? "Unknown",
-                    imageBytes: imageBytes,
-                    authorOrCategory: recipe['insertedBy'] == 'admin'
-                        ? 'Admin'
-                        : recipe['userName'] ?? 'Unknown',
-                    time: recipe['time'] ?? 'N/A',
-                    rating: 4.8,
-                    isFavorite: false,
-                    onFavoritePressed: () {
-                      // Handle favorite button press
-                    },
-                    onEditPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => EditRecipeScreen(
-                            recipeId: recipe['id'],
-                            initialName: recipe['name'],
-                            initialIngredients: recipe['ingredients'],
-                            initialInstructions: recipe['instructions'],
-                            initialTime: recipe['time'],
-                            initialImage: recipe['image'],
-                            onUpdateRecipe: _updateRecipe,
+        backgroundColor: AppColors.background,
+        body: Padding(
+          padding: const EdgeInsets.all(8.0),
+          child: isLoading
+              ? const Center(child: CircularProgressIndicator())
+              : ListView.builder(
+                  itemCount: recipes.length,
+                  itemBuilder: (context, index) {
+                    final recipe = recipes[index];
+                    final imageBytes = recipe['image'] as Uint8List?;
+                    return RecipeCard(
+                      title: recipe['name'] ?? "Unknown",
+                      imageBytes: imageBytes,
+                      authorOrCategory: recipe['insertedBy'] == 'admin'
+                          ? 'Admin'
+                          : recipe['userName'] ?? 'Unknown',
+                      time: recipe['time'] ?? 'N/A',
+                      rating: recipe['avgRating'] ?? 0.0,
+                      isFavorite: false,
+                      onFavoritePressed: () {
+                        // Handle favorite button press
+                      },
+                      onEditPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => EditRecipeScreen(
+                              recipeId: recipe['id'],
+                              initialName: recipe['name'],
+                              initialIngredients: recipe['ingredients'],
+                              initialInstructions: recipe['instructions'],
+                              initialyoutubeLink: recipe['youtubeLink'],
+                              initialTime: recipe['time'],
+                              initialImage: recipe['image'],
+                              onUpdateRecipe: _updateRecipe,
+                            ),
                           ),
-                        ),
-                      );
-                    },
-                    onDeletePressed: () {
-                      _deleteRecipe(recipe['id']);
-                    },
-                    onTap: () {
-                      print("Recipe Clicked");
-                    },
-                    showFavorite: false,
-                    showMenu: true,
-                    isCategory: false,
-                  );
-                },
-              ),
-      ),
-      bottomNavigationBar: AdminBottomNavigationBar(
-          currentIndex: _selectedIndex, onTap: _onNavItemTapped),
-      floatingActionButton: FloatingActionButton(
-        backgroundColor: AppColors.buttonBackground,
-        onPressed: () => _showAddRecipeModal(context),
-        child: const Icon(
-          Icons.add,
-          color: AppColors.background,
-          size: 28,
+                        );
+                      },
+                      onDeletePressed: () {
+                        _deleteRecipe(recipe['id']);
+                      },
+                      onTap: () {
+                        print("Recipe Clicked");
+                      },
+                      showFavorite: false,
+                      showMenu: true,
+                      isCategory: false,
+                    );
+                  },
+                ),
+        ),
+        bottomNavigationBar: AdminBottomNavigationBar(
+            currentIndex: _selectedIndex, onTap: _onNavItemTapped),
+        floatingActionButton: FloatingActionButton(
+          backgroundColor: AppColors.buttonBackground,
+          onPressed: () => _showAddRecipeModal(context),
+          child: const Icon(
+            Icons.add,
+            color: AppColors.background,
+            size: 28,
+          ),
         ),
       ),
     );

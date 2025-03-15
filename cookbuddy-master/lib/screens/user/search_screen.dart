@@ -108,8 +108,8 @@ class _SearchScreenState extends State<SearchScreen> {
                                   context,
                                   MaterialPageRoute(
                                     builder: (context) => RecipeDetailScreen(
-                                      recipeId: recipe[
-                                          'id'], // Pass the recipe details
+                                      recipeId: recipeId,
+                                      userEmail: "user@example.com", // Pass the recipe details
                                     ),
                                   ),
                                 );

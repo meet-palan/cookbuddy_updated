@@ -109,12 +109,23 @@ class DatabaseHelper {
         FOREIGN KEY(recipeId) REFERENCES Recipes(id)
       )
     ''');
-    await db.execute('''
+    /*await db.execute('''
       CREATE TABLE favorites(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         recipeId INTEGER UNIQUE,
         FOREIGN KEY(recipeId) REFERENCES Recipes(id)
       )
+    ''');*/
+
+    await db.execute('''
+      CREATE TABLE favorites(
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      userId INTEGER,
+      recipeId INTEGER,
+      FOREIGN KEY(userId) REFERENCES Users(id),
+      FOREIGN KEY(recipeId) REFERENCES Recipes(id),
+      UNIQUE(userId, recipeId) -- Ensure each user can only favorite a recipe once
+    );
     ''');
 
     await db.execute('''
@@ -151,6 +162,7 @@ class DatabaseHelper {
       ''');
     }
   }
+
   Future<Map<String, dynamic>?> getRecipeDetails(int recipeId) async {
     final db = await database;
     final List<Map<String, dynamic>> result = await db.query(
@@ -166,6 +178,7 @@ class DatabaseHelper {
     final db = await database;
     await db.insert('Recipes', recipe);
   }
+
   Future<List<Map<String, dynamic>>> fetchUserRecipes(int userId) async {
     final db = await database;
     return await db.rawQuery('''
@@ -176,6 +189,7 @@ class DatabaseHelper {
     WHERE Recipes.uploaderId = ?
   ''', [userId]);
   }
+
   Future<void> addRecipeByUser(Map<String, dynamic> recipeData, String userEmail) async {
     final db = await database;
 
@@ -194,7 +208,6 @@ class DatabaseHelper {
     final userId = userResult.first['id'];
     final username = userResult.first['username'];
 
-
     // Insert the recipe
     await db.insert(
       'Recipes',
@@ -212,7 +225,6 @@ class DatabaseHelper {
     );
   }
 
-
   Future<List<Map<String, dynamic>>> getRecipesByEmail(String email) async {
     final db = await database;
     final List<Map<String, dynamic>> result = await db.rawQuery('''
@@ -223,6 +235,7 @@ class DatabaseHelper {
     ''', [email]);
     return result;
   }
+
   //recipes for selling
   Future<void> addSellingRecipe(Map<String, dynamic> recipe) async {
     final db = await database;
@@ -232,6 +245,7 @@ class DatabaseHelper {
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
   }
+
   //get recipes which are for selling
   Future<List<Map<String, dynamic>>> getSellingRecipes() async {
     final db = await database;
@@ -321,6 +335,7 @@ class DatabaseHelper {
     );
     return result.isNotEmpty ? result.first : null;
   }
+
   Future<void> updateUser(Map<String, dynamic> user) async {
     final db = await database;
     await db.update(
@@ -334,11 +349,13 @@ class DatabaseHelper {
       whereArgs: [user['id']],
     );
   }
+
   Future<List<Map<String, dynamic>>> getAllUsers() async {
     final db = await instance.database;
     return await db.query('Users'); // Replace 'Users' with your actual table name
   }
-// Delete user and their recipes
+
+  // Delete user and their recipes
   Future<void> deleteUserAndRecipes(int userId) async {
     final db = await instance.database;
 
@@ -380,10 +397,8 @@ class DatabaseHelper {
         'time'
       ], // Specify the columns to retrieve
     );
-
     return recipes;
   }
-
 
   Future<void> addTransaction(Map<String, dynamic> transaction) async {
     final db = await database;
@@ -395,6 +410,7 @@ class DatabaseHelper {
     final db = await database;
     await db.insert('Categories', category);
   }
+
   //delete category
   Future<void> deleteCategory(int categoryId) async {
     final db = await database;
@@ -436,7 +452,6 @@ class DatabaseHelper {
       whereArgs: [commentId],
     );
   }
-
 
   // Fetch comments and ratings for a recipe
   Future<List<Map<String, dynamic>>> getCommentsAndRatings(int recipeId) async {
@@ -483,12 +498,20 @@ class DatabaseHelper {
       return 'Unknown';  // Return 'Unknown' if no category is found
     }
   }
-  Future<int> addToFavorites(int recipeId) async {
+
+  /*Future<int> addToFavorites(int recipeId) async {
     final db = await instance.database;
     return await db.insert('favorites', {'recipeId': recipeId});
+  }*/
+
+  // Add to favorites with userId
+  Future<int> addToFavorites(int userId, int recipeId) async {
+    final db = await database;
+    return await db.insert('favorites', {'userId': userId, 'recipeId': recipeId},
+        conflictAlgorithm: ConflictAlgorithm.ignore);
   }
 
-  // Remove recipe from favorites
+  /*// Remove recipe from favorites
   Future<int> removeFromFavorites(int recipeId) async {
     final db = await instance.database;
     return await db.delete(
@@ -496,10 +519,40 @@ class DatabaseHelper {
       where: 'recipeId = ?',
       whereArgs: [recipeId],
     );
+  }*/
+
+  // Remove from favorites with userId
+  Future<int> removeFromFavorites(int userId, int recipeId) async {
+    final db = await database;
+    return await db.delete(
+      'favorites',
+      where: 'userId = ? AND recipeId = ?',
+      whereArgs: [userId, recipeId],
+    );
   }
 
+  // Check if a recipe is favorite for a specific user
+  Future<bool> isRecipeFavorite(int userId, int recipeId) async {
+    final db = await database;
+    final result = await db.query(
+      'favorites',
+      where: 'userId = ? AND recipeId = ?',
+      whereArgs: [userId, recipeId],
+    );
+    return result.isNotEmpty;
+  }
 
-  // Check if recipe is in favorites
+  // Fetch favorite recipes for a specific user
+  Future<List<Map<String, dynamic>>> getUserFavorites(int userId) async {
+    final db = await database;
+    return await db.rawQuery('''
+    SELECT r.* FROM Recipes r
+    INNER JOIN favorites f ON r.id = f.recipeId
+    WHERE f.userId = ?
+  ''', [userId]);
+  }
+
+  /*// Check if recipe is in favorites
   Future<bool> isRecipeFavorite(int recipeId) async {
     final db = await instance.database;
     final result = await db.query(
@@ -508,7 +561,7 @@ class DatabaseHelper {
       whereArgs: [recipeId],
     );
     return result.isNotEmpty;
-  }
+  }*/
 
   // Get all favorite recipes
   Future<List<Map<String, dynamic>>> getAllFavorites() async {
@@ -527,7 +580,17 @@ class DatabaseHelper {
     '''
     );
   }
-  Future<void> toggleFavorite(int recipeId, bool isFavorite) async {
+
+  // Toggle favorite status
+  Future<void> toggleFavorite(int userId, int recipeId, bool isFavorite) async {
+    if (isFavorite) {
+      await addToFavorites(userId, recipeId);
+    } else {
+      await removeFromFavorites(userId, recipeId);
+    }
+  }
+
+  /*Future<void> toggleFavorite(int recipeId, bool isFavorite) async {
     final db = await database;
 
     if (isFavorite) {
@@ -537,7 +600,7 @@ class DatabaseHelper {
       // Remove from favorites
       await db.delete('favorites', where: 'recipeId = ?', whereArgs: [recipeId]);
     }
-  }
+  }*/
 
   Future<int> updateUserCredits(int userId, int credits) async {
     final db = await instance.database;
@@ -548,7 +611,7 @@ class DatabaseHelper {
       whereArgs: [userId],
     );
   }
-  
+
   Future<void> assignInitialCredits() async {
     final db = await database;
     await db.rawUpdate('''
@@ -557,7 +620,6 @@ class DatabaseHelper {
       WHERE credits IS NULL OR credits = 0
     ''');
   }
-
 
   // Close the database
   Future<void> closeDatabase() async {
