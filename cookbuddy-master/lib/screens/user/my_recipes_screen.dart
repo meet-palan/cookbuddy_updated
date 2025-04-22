@@ -41,7 +41,8 @@ class _MyRecipesScreenState extends State<MyRecipesScreen> {
     });
 
     // Fetch recipes uploaded by the user
-    List<Map<String, dynamic>> fetchedRecipes = await _databaseHelper.getRecipesByEmail(widget.userEmail);
+    List<Map<String, dynamic>> fetchedRecipes =
+        await _databaseHelper.getRecipesByEmail(widget.userEmail);
 
     List<Map<String, dynamic>> updatedRecipes = [];
 
@@ -52,9 +53,11 @@ class _MyRecipesScreenState extends State<MyRecipesScreen> {
       SELECT AVG(rating) AS avgRating FROM CommentAndRating WHERE recipeId = ?
     ''', [recipe['id']]);
 
-      double avgRating = (result.isNotEmpty && result.first['avgRating'] != null)
-          ? double.parse((result.first['avgRating'] as double).toStringAsFixed(1))
-          : 0.0;
+      double avgRating =
+          (result.isNotEmpty && result.first['avgRating'] != null)
+              ? double.parse(
+                  (result.first['avgRating'] as double).toStringAsFixed(1))
+              : 0.0;
 
       // Create a new mutable map instead of modifying the original read-only map
       updatedRecipes.add({
@@ -83,7 +86,7 @@ class _MyRecipesScreenState extends State<MyRecipesScreen> {
         'name': name,
         'ingredients': ingredients,
         'instructions': instructions,
-        'youtubeLink' : youtubeLink,
+        'youtubeLink': youtubeLink,
         'time': time,
       },
       where: 'id = ?',
@@ -164,7 +167,8 @@ class _MyRecipesScreenState extends State<MyRecipesScreen> {
   void _showAddRecipeModal(BuildContext context) {
     final TextEditingController nameController = TextEditingController();
     final TextEditingController ingredientsController = TextEditingController();
-    final TextEditingController instructionsController = TextEditingController();
+    final TextEditingController instructionsController =
+        TextEditingController();
     final TextEditingController youtubeController = TextEditingController();
     Uint8List? selectedImage;
     int? selectedCategoryId;
@@ -700,7 +704,8 @@ class _MyRecipesScreenState extends State<MyRecipesScreen> {
                     imageBytes: imageBytes,
                     time: recipe['time'] ?? "N/A",
                     authorOrCategory: recipe['uploaderName'] ?? "Unknown",
-                    rating: recipe['avgRating'] ?? 0.0, // Static for now, replace with DB value if available
+                    rating: recipe['avgRating'] ??
+                        0.0, // Static for now, replace with DB value if available
                     isFavorite: false, // Implement favorite logic
                     showFavorite: false, showMenu: true, isCategory: false,
                     onFavoritePressed: () {

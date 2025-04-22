@@ -48,7 +48,7 @@ class _RecipeManagementScreenState extends State<RecipeManagementScreen> {
   Future<void> _fetchRecipes() async {
     final db = await _databaseHelper.database;
     final result = await db.rawQuery('''
-    SELECT Recipes.*, 
+    SELECT Recipes.*,
            Users.username AS userName,
            (SELECT AVG(rating) FROM CommentAndRating WHERE CommentAndRating.recipeId = Recipes.id) AS avgRating
     FROM Recipes
@@ -61,7 +61,8 @@ class _RecipeManagementScreenState extends State<RecipeManagementScreen> {
         double avgRating = (recipe['avgRating'] as double?) ?? 0.0;
         return {
           ...recipe, // Copy all existing key-value pairs
-          'avgRating': double.parse(avgRating.toStringAsFixed(1)), // Round to 1 decimal
+          'avgRating':
+              double.parse(avgRating.toStringAsFixed(1)), // Round to 1 decimal
         };
       }).toList();
     });
@@ -84,7 +85,7 @@ class _RecipeManagementScreenState extends State<RecipeManagementScreen> {
   }
 
   Future<void> _updateRecipe(int id, String name, String ingredients,
-      String instructions, String youtubeLink , String? time) async {
+      String instructions, String youtubeLink, String? time) async {
     final db = await _databaseHelper.database;
     await db.update(
       'Recipes',
@@ -92,7 +93,7 @@ class _RecipeManagementScreenState extends State<RecipeManagementScreen> {
         'name': name,
         'ingredients': ingredients,
         'instructions': instructions,
-        'youtubeLink' : youtubeLink,
+        'youtubeLink': youtubeLink,
         'time': time,
       },
       where: 'id = ?',
@@ -103,7 +104,8 @@ class _RecipeManagementScreenState extends State<RecipeManagementScreen> {
   void _showAddRecipeModal(BuildContext context) {
     final TextEditingController nameController = TextEditingController();
     final TextEditingController ingredientsController = TextEditingController();
-    final TextEditingController instructionsController = TextEditingController();
+    final TextEditingController instructionsController =
+        TextEditingController();
     final TextEditingController youtubeController = TextEditingController();
     Uint8List? selectedImage;
     int? selectedCategoryId;
@@ -306,9 +308,9 @@ class _RecipeManagementScreenState extends State<RecipeManagementScreen> {
                   labelText: "YouTube Link",
                   labelStyle: GoogleFonts.lora(
                       color: AppColors.hintText // Label text color
-                  ),
+                      ),
                   floatingLabelStyle:
-                  GoogleFonts.lora(color: Colors.orangeAccent),
+                      GoogleFonts.lora(color: Colors.orangeAccent),
                   focusedBorder: OutlineInputBorder(
                     borderSide: BorderSide(color: Colors.orangeAccent),
                   ),
