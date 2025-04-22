@@ -6,32 +6,172 @@ import 'package:cookbuddy/utils/colors.dart';
 import 'package:cookbuddy/widgets/CustomBottomNavigationBar.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-// import 'package:table_calendar/table_calendar.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import 'package:share_plus/share_plus.dart';
 
 class MealPlannerScreen extends StatefulWidget {
   final String userEmail;
-  const MealPlannerScreen({super.key, required this.userEmail});
+  MealPlannerScreen({required this.userEmail});
 
   @override
   _MealPlannerScreenState createState() => _MealPlannerScreenState();
 }
 
 class _MealPlannerScreenState extends State<MealPlannerScreen> {
-  // DateTime _focusedDay = DateTime.now();
-  // DateTime _selectedDay = DateTime.now();
-  // final Map<DateTime, Map<String, String>> _mealPlan = {};
-  // final _mealSlots = ["Breakfast", "Lunch", "Dinner", "Snacks"];
-  // final Map<String, TextEditingController> _controllers = {};
+  final _breakfastController = TextEditingController();
+  final _lunchController = TextEditingController();
+  final _dinnerController = TextEditingController();
+
+  final _breakfastFocus = FocusNode();
+  final _lunchFocus = FocusNode();
+  final _dinnerFocus = FocusNode();
 
   int _currentIndex = 3;
+  bool _loading = false;
+  String _shoppingListText = ""; // NEW: Holds the generated shopping list
 
-  // @override
-  // void dispose() {
-  //   for (var controller in _controllers.values) {
-  //     controller.dispose();
-  //   }
-  //   super.dispose();
-  // }
+  @override
+  void initState() {
+    super.initState();
+    _breakfastFocus.addListener(() => setState(() {}));
+    _lunchFocus.addListener(() => setState(() {}));
+    _dinnerFocus.addListener(() => setState(() {}));
+  }
+
+  @override
+  void dispose() {
+    _breakfastController.dispose();
+    _lunchController.dispose();
+    _dinnerController.dispose();
+    _breakfastFocus.dispose();
+    _lunchFocus.dispose();
+    _dinnerFocus.dispose();
+    super.dispose();
+  }
+
+  Future<void> generateShoppingList() async {
+    final breakfast = _breakfastController.text.trim();
+    final lunch = _lunchController.text.trim();
+    final dinner = _dinnerController.text.trim();
+
+    if (breakfast.isEmpty && lunch.isEmpty && dinner.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Please enter at least one meal.")),
+      );
+      return;
+    }
+
+    setState(() {
+      _loading = true;
+    });
+
+    final prompt = '''
+Create a shopping list to prepare the following meals:
+Breakfast: $breakfast
+Lunch: $lunch
+Dinner: $dinner
+Group ingredients by meal with clear headings.
+''';
+
+    final url = Uri.parse(
+      "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=AIzaSyBsuxiz_GZMHdvn6XW7MYOQwvzo9x1Rsoo",
+    );
+
+    final response = await http.post(
+      url,
+      headers: {"Content-Type": "application/json"},
+      body: jsonEncode({
+        "contents": [
+          {
+            "parts": [
+              {"text": prompt}
+            ]
+          }
+        ]
+      }),
+    );
+
+    String result = "Failed to generate shopping list.";
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      result = data["candidates"]?[0]["content"]["parts"][0]["text"] ?? result;
+      _shoppingListText = result; // Save to share later
+    }
+
+    setState(() {
+      _loading = false;
+    });
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        final formattedList = formatShoppingList(_shoppingListText);
+        return AlertDialog(
+          backgroundColor: AppColors.background,
+          title: Text("Shopping List", style: GoogleFonts.lora(fontWeight: FontWeight.bold, color: AppColors.headingText)),
+          content: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: formattedList,
+            ),
+          ),
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.share),
+              onPressed: () {
+                Share.share(_shoppingListText); // Use actual content here
+              },
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text("Close", style: GoogleFonts.lora(fontWeight: FontWeight.bold, color: Colors.orange)),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  List<Widget> formatShoppingList(String rawText) {
+    final lines = rawText.split('\n');
+    final widgets = <Widget>[];
+
+    for (var line in lines) {
+      line = line.trim();
+      if (line.isEmpty) continue;
+      line = line.replaceAll('', '').replaceAll('*', '').trim();
+
+      if (!line.startsWith('-') && !line.startsWith('•')) {
+        widgets.add(
+          Padding(
+            padding: const EdgeInsets.only(top: 12.0, bottom: 4.0),
+            child: Text(
+              line,
+              style: GoogleFonts.lora(
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.headingText),
+            ),
+          ),
+        );
+      } else {
+        widgets.add(
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 2.0),
+            child: Row(
+              children: [
+                Icon(Icons.check, size: 16, color: Colors.green),
+                SizedBox(width: 8),
+                Expanded(child: Text(line.replaceFirst(RegExp(r'^[-•]'), '').trim())),
+              ],
+            ),
+          ),
+        );
+      }
+    }
+
+    return widgets;
+  }
 
   void _onBottomNavTapped(int index) {
     setState(() {
@@ -90,7 +230,7 @@ class _MealPlannerScreenState extends State<MealPlannerScreen> {
         automaticallyImplyLeading: false,
         backgroundColor: AppColors.appBar,
         title: Text(
-          "Meal Planner",
+          "Generate Shopping List",
           style: GoogleFonts.lora(
               fontWeight: FontWeight.bold,
               color: AppColors.headingText,
@@ -99,13 +239,35 @@ class _MealPlannerScreenState extends State<MealPlannerScreen> {
         centerTitle: true,
       ),
       backgroundColor: AppColors.background,
-      body: Center(
-        child: Text(
-          'Coming Soon',
-          style: GoogleFonts.lora(
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-              color: AppColors.headingText),
+      body: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: ListView(
+          children: [
+            buildInputField("Breakfast", _breakfastController, _breakfastFocus),
+            SizedBox(height: 10),
+            buildInputField("Lunch", _lunchController, _lunchFocus),
+            SizedBox(height: 10),
+            buildInputField("Dinner", _dinnerController, _dinnerFocus),
+            SizedBox(height: 20),
+            ElevatedButton.icon(
+              onPressed: _loading ? null : generateShoppingList,
+              icon: Icon(Icons.shopping_cart, color: AppColors.buttonText),
+              label: _loading
+                  ? SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                  : Text(
+                "Generate",
+                style: GoogleFonts.lora(
+                  fontSize: 18,
+                  color: AppColors.buttonText,
+                ),
+              ),
+              style: ElevatedButton.styleFrom(
+                padding: EdgeInsets.symmetric(vertical: 14),
+                backgroundColor: Colors.orange,
+                foregroundColor: Colors.white,
+              ),
+            ),
+          ],
         ),
       ),
       bottomNavigationBar: CustomBottomNavigationBar(
@@ -115,207 +277,23 @@ class _MealPlannerScreenState extends State<MealPlannerScreen> {
     );
   }
 
-  // TextEditingController _getController(String slot) {
-  //   _controllers.putIfAbsent(slot, () {
-  //     String initialText = _mealPlan[_selectedDay]?[slot] ?? "";
-  //     return TextEditingController(text: initialText);
-  //   });
-  //   return _controllers[slot]!;
-  // }
-
-  // void _showCalendarModal(BuildContext context) {
-  //   showModalBottomSheet(
-  //     context: context,
-  //     shape: RoundedRectangleBorder(
-  //       borderRadius: BorderRadius.vertical(top: Radius.circular(20.0)),
-  //     ),
-  //     builder: (context) {
-  //       return Container(
-  //         height: 400,
-  //         padding: const EdgeInsets.all(8.0),
-  //         child: Column(
-  //           children: [
-  //             Text(
-  //               "Select a Date",
-  //               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-  //             ),
-  //             Expanded(
-  //               child: TableCalendar(
-  //                 firstDay: DateTime(2020),
-  //                 lastDay: DateTime(2050),
-  //                 focusedDay: _focusedDay,
-  //                 selectedDayPredicate: (day) {
-  //                   return isSameDay(_selectedDay, day);
-  //                 },
-  //                 onDaySelected: (selectedDay, focusedDay) {
-  //                   setState(() {
-  //                     _selectedDay = selectedDay;
-  //                     _focusedDay = focusedDay;
-  //                   });
-  //                   Navigator.pop(context); // Close modal on selection
-  //                 },
-  //                 calendarStyle: CalendarStyle(
-  //                   selectedDecoration: BoxDecoration(
-  //                     color: Colors.orange,
-  //                     shape: BoxShape.circle,
-  //                   ),
-  //                   todayDecoration: BoxDecoration(
-  //                     color: Colors.orange.shade200,
-  //                     shape: BoxShape.circle,
-  //                   ),
-  //                   defaultDecoration: BoxDecoration(
-  //                     shape: BoxShape.circle,
-  //                   ),
-  //                 ),
-  //                 headerStyle: HeaderStyle(
-  //                   formatButtonVisible: false,
-  //                   titleCentered: true,
-  //                 ),
-  //               ),
-  //             ),
-  //           ],
-  //         ),
-  //       );
-  //     },
-  //   );
-  // }
-
-  // void _generateShoppingListUsingAI() {
-  //   List<String> shoppingList = [];
-  //   _mealPlan[_selectedDay]?.values.forEach((meal) {
-  //     shoppingList.addAll(meal.split(", ").map((item) => item.trim()));
-  //   });
-  //   shoppingList = shoppingList.toSet().toList(); // Remove duplicates
-
-  //   Map<String, List<String>> categorizedList = {
-  //     "Dairy": [],
-  //     "Vegetables": [],
-  //     "Protein": [],
-  //     "Grains": [],
-  //     "Others": []
-  //   };
-
-  //   for (var item in shoppingList) {
-  //     if (["milk", "cheese", "butter", "yogurt"].contains(item.toLowerCase())) {
-  //       categorizedList["Dairy"]!.add(item);
-  //     } else if (["carrot", "spinach", "potato", "tomato"]
-  //         .contains(item.toLowerCase())) {
-  //       categorizedList["Vegetables"]!.add(item);
-  //     } else if (["chicken", "egg", "fish", "tofu"]
-  //         .contains(item.toLowerCase())) {
-  //       categorizedList["Protein"]!.add(item);
-  //     } else if (["rice", "bread", "pasta", "oats"]
-  //         .contains(item.toLowerCase())) {
-  //       categorizedList["Grains"]!.add(item);
-  //     } else {
-  //       categorizedList["Others"]!.add(item);
-  //     }
-  //   }
-
-  //   showDialog(
-  //     context: context,
-  //     builder: (context) {
-  //       return AlertDialog(
-  //         title: Text("AI-Generated Shopping List"),
-  //         content: Column(
-  //           mainAxisSize: MainAxisSize.min,
-  //           children: categorizedList.entries
-  //               .where((entry) => entry.value.isNotEmpty)
-  //               .map((entry) {
-  //             return Column(
-  //               crossAxisAlignment: CrossAxisAlignment.start,
-  //               children: [
-  //                 Text(
-  //                   entry.key,
-  //                   style: TextStyle(fontWeight: FontWeight.bold),
-  //                 ),
-  //                 ...entry.value.map((item) => Text("- $item")),
-  //                 SizedBox(height: 8),
-  //               ],
-  //             );
-  //           }).toList(),
-  //         ),
-  //         actions: [
-  //           TextButton(
-  //             onPressed: () {
-  //               Navigator.pop(context);
-  //             },
-  //             child: Text("Close"),
-  //           ),
-  //         ],
-  //       );
-  //     },
-  //   );
-  // }
+  Widget buildInputField(String label, TextEditingController controller, FocusNode focusNode) {
+    final isFocused = focusNode.hasFocus;
+    return TextField(
+      controller: controller,
+      focusNode: focusNode,
+      cursorColor: Colors.orange,
+      decoration: InputDecoration(
+        labelText: label,
+        labelStyle: TextStyle(color: isFocused ? Colors.orange : AppColors.headingText),
+        prefixIcon: Icon(Icons.restaurant_menu, color: isFocused ? Colors.orange : AppColors.headingText),
+        focusedBorder: OutlineInputBorder(
+          borderSide: BorderSide(color: Colors.orange, width: 2),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderSide: BorderSide(color: AppColors.headingText),
+        ),
+      ),
+    );
+  }
 }
-
-// Meal Slot Widget
-// class MealSlotWidget extends StatelessWidget {
-//   final String slot;
-//   final TextEditingController controller;
-//   final Function(String) onMealChanged;
-
-//   const MealSlotWidget({
-//     super.key,
-//     required this.slot,
-//     required this.controller,
-//     required this.onMealChanged,
-//   });
-
-//   @override
-//   Widget build(BuildContext context) {
-//     return Card(
-//       elevation: 6,
-//       shape: RoundedRectangleBorder(
-//         borderRadius: BorderRadius.circular(20),
-//       ),
-//       margin: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-//       color: Color(0xFFFFF3E0), // Light Peach background
-//       child: Container(
-//         width: double.infinity,
-//         padding: EdgeInsets.all(16),
-//         constraints: BoxConstraints(minHeight: 160),
-//         child: Column(
-//           crossAxisAlignment: CrossAxisAlignment.start,
-//           mainAxisSize: MainAxisSize.min,
-//           children: [
-//             Text(
-//               slot,
-//               style: GoogleFonts.lora(
-//                 fontWeight: FontWeight.bold,
-//                 fontSize: 18,
-//                 color: AppColors.headingText, // Dark Brown
-//               ),
-//             ),
-//             SizedBox(height: 12),
-//             TextField(
-//               controller: controller,
-//               maxLines: 3,
-//               decoration: InputDecoration(
-//                 hintText: "Enter meals (e.g., Eggs, Milk, Bread)",
-//                 hintStyle:
-//                     GoogleFonts.lora(color: AppColors.hintText), // Muted Brown
-//                 border: OutlineInputBorder(
-//                   borderRadius: BorderRadius.circular(12),
-//                   borderSide:
-//                       BorderSide(color: AppColors.enabledBorder), // Light Brown
-//                 ),
-//                 focusedBorder: OutlineInputBorder(
-//                   borderRadius: BorderRadius.circular(12),
-//                   borderSide: BorderSide(
-//                       color: AppColors.enabledBorder,
-//                       width: 2), // Orange Accent
-//                 ),
-//                 filled: true,
-//                 fillColor: Color(0xFFFFE0B2), // Soft orange shade
-//                 contentPadding:
-//                     EdgeInsets.symmetric(vertical: 14, horizontal: 16),
-//               ),
-//               onChanged: onMealChanged,
-//             ),
-//           ],
-//         ),
-//       ),
-//     );
-//   }
-// }
