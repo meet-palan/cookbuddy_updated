@@ -9,6 +9,8 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:share_plus/share_plus.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class MealPlannerScreen extends StatefulWidget {
   final String userEmail;
@@ -29,14 +31,42 @@ class _MealPlannerScreenState extends State<MealPlannerScreen> {
 
   int _currentIndex = 3;
   bool _loading = false;
-  String _shoppingListText = ""; // NEW: Holds the generated shopping list
+  String _shoppingListText = "";
+
+  int _generationCount = 0;
+  final int _maxGenerations = 2;
 
   @override
   void initState() {
     super.initState();
+
     _breakfastFocus.addListener(() => setState(() {}));
     _lunchFocus.addListener(() => setState(() {}));
     _dinnerFocus.addListener(() => setState(() {}));
+
+    checkInternetOnStart();
+    loadGenerationCount();
+  }
+
+  Future<void> loadGenerationCount() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _generationCount = prefs.getInt('generation_count_${widget.userEmail}') ?? 0;
+    });
+  }
+
+  Future<void> checkInternetOnStart() async {
+    final connectivityResult = await Connectivity().checkConnectivity();
+    if (connectivityResult == ConnectivityResult.none) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("No internet connection. Some features may not work."),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+      });
+    }
   }
 
   @override
@@ -51,6 +81,16 @@ class _MealPlannerScreenState extends State<MealPlannerScreen> {
   }
 
   Future<void> generateShoppingList() async {
+    if (_generationCount >= _maxGenerations) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("Limit reached. You can only generate the shopping list 2 times."),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+      return;
+    }
+
     final breakfast = _breakfastController.text.trim();
     final lunch = _lunchController.text.trim();
     final dinner = _dinnerController.text.trim();
@@ -58,6 +98,14 @@ class _MealPlannerScreenState extends State<MealPlannerScreen> {
     if (breakfast.isEmpty && lunch.isEmpty && dinner.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text("Please enter at least one meal.")),
+      );
+      return;
+    }
+
+    final connectivityResult = await Connectivity().checkConnectivity();
+    if (connectivityResult == ConnectivityResult.none) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("No internet connection.")),
       );
       return;
     }
@@ -96,12 +144,16 @@ Group ingredients by meal with clear headings.
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body);
       result = data["candidates"]?[0]["content"]["parts"][0]["text"] ?? result;
-      _shoppingListText = result; // Save to share later
+      _shoppingListText = result;
     }
 
     setState(() {
       _loading = false;
+      _generationCount++;
     });
+
+    final prefs = await SharedPreferences.getInstance();
+    prefs.setInt('generation_count_${widget.userEmail}', _generationCount);
 
     showDialog(
       context: context,
@@ -120,7 +172,7 @@ Group ingredients by meal with clear headings.
             IconButton(
               icon: const Icon(Icons.share),
               onPressed: () {
-                Share.share(_shoppingListText); // Use actual content here
+                Share.share(_shoppingListText);
               },
             ),
             TextButton(
@@ -148,9 +200,7 @@ Group ingredients by meal with clear headings.
             padding: const EdgeInsets.only(top: 12.0, bottom: 4.0),
             child: Text(
               line,
-              style: GoogleFonts.lora(
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.headingText),
+              style: GoogleFonts.lora(fontWeight: FontWeight.bold, color: AppColors.headingText),
             ),
           ),
         );
@@ -180,44 +230,19 @@ Group ingredients by meal with clear headings.
 
     switch (index) {
       case 0:
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-              builder: (context) =>
-                  UserHomeScreen(userEmail: widget.userEmail)),
-        );
+        Navigator.push(context, MaterialPageRoute(builder: (context) => UserHomeScreen(userEmail: widget.userEmail)));
         break;
       case 1:
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-              builder: (context) =>
-                  MyRecipesScreen(userEmail: widget.userEmail)),
-        );
+        Navigator.push(context, MaterialPageRoute(builder: (context) => MyRecipesScreen(userEmail: widget.userEmail)));
         break;
       case 2:
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-              builder: (context) =>
-                  RecipeSellingPage(currentUserEmail: widget.userEmail)),
-        );
+        Navigator.push(context, MaterialPageRoute(builder: (context) => RecipeSellingPage(currentUserEmail: widget.userEmail)));
         break;
       case 3:
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-              builder: (context) =>
-                  MealPlannerScreen(userEmail: widget.userEmail)),
-        );
+        Navigator.push(context, MaterialPageRoute(builder: (context) => MealPlannerScreen(userEmail: widget.userEmail)));
         break;
       case 4:
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-              builder: (context) =>
-                  FavoriteScreen(userEmail: widget.userEmail)),
-        );
+        Navigator.push(context, MaterialPageRoute(builder: (context) => FavoriteScreen(userEmail: widget.userEmail)));
         break;
     }
   }
@@ -248,10 +273,16 @@ Group ingredients by meal with clear headings.
             buildInputField("Lunch", _lunchController, _lunchFocus),
             SizedBox(height: 10),
             buildInputField("Dinner", _dinnerController, _dinnerFocus),
+            SizedBox(height: 10),
+            /*Text(
+              "Remaining uses: ${_maxGenerations - _generationCount}",
+              style: TextStyle(color: Colors.grey[700]),
+              textAlign: TextAlign.center,
+            ),*/
             SizedBox(height: 20),
             ElevatedButton.icon(
               onPressed: _loading ? null : generateShoppingList,
-              icon: Icon(Icons.shopping_cart, color: AppColors.buttonText),
+              icon: Icon(Icons.auto_awesome, color: AppColors.buttonText), // Changed icon here
               label: _loading
                   ? SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2))
                   : Text(

@@ -50,6 +50,7 @@ dependencies:
   flutter_dotenv: ^5.2.1
   permission_handler: ^11.1.0
   intl: any
+  connectivity_plus: ^5.0.2
 
   lottie:
   crystal_navigation_bar:
